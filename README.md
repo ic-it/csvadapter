@@ -72,6 +72,17 @@ The `CSVAdapter` type is a generic struct that adapts a Go struct to a CSV file:
 - `EatCSV(reader io.Reader, v *[]T) error`: Reads a CSV file from the provided 
     `io.Reader` and populates the provided slice with the struct data.
 
+### Allowed Types
+
+The `CSVAdapter` supports the following types:
+
+- `string`
+- `int`, `int8`, `int16`, `int32`, `int64`
+- `uint`, `uint8`, `uint16`, `uint32`, `uint64`
+- `float32`, `float64`
+- `bool`
+- **Any type that implements the `encoding.TextUnmarshaler` interface**
+
 ### Example
 
 Here is a complete example demonstrating how to use the `CSVAdapter`:

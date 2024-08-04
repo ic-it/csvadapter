@@ -47,9 +47,6 @@ func NewCSVAdapter[T any]() (*CSVAdapter[T], error) {
 		field.name = fld.Name
 		tagParts := strings.Split(tag, ",")
 		fielAlias := tagParts[0]
-		if fielAlias == "" {
-			fielAlias = fld.Name
-		}
 		field.alias = fielAlias
 		for _, part := range tagParts[1:] {
 			if part == "omitempty" {
@@ -94,9 +91,6 @@ func (c *CSVAdapter[T]) EatCSV(reader io.Reader, v *[]T) error {
 				fmt.Errorf("line %d, field %s", line, v.alias))
 			pos, isFound := fieldsPositions[v.alias]
 			if !isFound {
-				if v.omitEmpty {
-					continue
-				}
 				return errors.Join(fieldErr, ErrFieldNotFound)
 			}
 			value := record[pos]
