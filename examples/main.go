@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/ic-it/csvadapter"
@@ -15,11 +16,11 @@ func (e *Email) UnmarshalText(text []byte) error {
 }
 
 type User struct {
-	Password  string `csvadapter:"password"`
-	ID        int    `csvadapter:"id"`
-	Username  string `csvadapter:"user"`
-	Email     Email  `csvadapter:"email"`
-	SomeOther bool   `csvadapter:"someother,omitempty"`
+	Password  string `csva:"password"`
+	ID        int    `csva:"id"`
+	Username  string `csva:"user"`
+	Email     Email  `csva:"email"`
+	SomeOther bool   `csva:"someother,omitempty"`
 }
 
 func (u User) String() string {
@@ -37,11 +38,30 @@ func main() {
 1,admin,123456,test@mail.cc,true,
 2,asdasd,asdasdad,test@mail.cc,,
 `)
-	var users []User
-	err = adapter.EatCSV(reader, &users)
+	users, err := adapter.FromCSV(reader)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println(users)
+	fmt.Println("Users:")
+	for user, err := range users {
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(user)
+	}
+
+	users2 := []User{
+		{ID: 1, Username: "admin", Password: "123456", Email: "asd@asd.cc", SomeOther: true},
+		{ID: 2, Username: "asdasd", Password: "asdasdad", Email: "dsa@dsa.cc", SomeOther: false},
+	}
+
+	writer := strings.Builder{}
+	err = adapter.ToCSV(&writer, slices.Values(users2))
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("CSV:")
+	fmt.Println(writer.String())
 }
