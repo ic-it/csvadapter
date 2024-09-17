@@ -40,4 +40,5 @@ tasks:
       - git add {{.VERSION_FILE}} {{.VERSION_GO_FILE}}
       - git commit -m "Bump version to v$(cat {{.VERSION_FILE}})"
       - git tag -a v$(cat {{.VERSION_FILE}}) -m "Release v$(cat {{.VERSION_FILE}})"
+      - git push origin
       - git push origin v$(cat {{.VERSION_FILE}})
