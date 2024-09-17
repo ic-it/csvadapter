@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"io"
+	"slices"
 	"testing"
 )
 
@@ -25,12 +26,12 @@ type PersonWrongTag struct {
 }
 
 type PersonWithManyTypes struct {
-	Name      string                   `csva:"name"`
-	Age       int                      `csva:"age"`
-	Email     PersonWithManyTypesEmail `csva:"email,omitempty"`
-	SomeFloat float64                  `csva:"some_float"`
-	SomeBool  bool                     `csva:"some_bool"`
-	SomePtr   *string                  `csva:"some_ptr"`
+	Name      string                    `csva:"name"`
+	Age       int                       `csva:"age"`
+	Email     *PersonWithManyTypesEmail `csva:"email,omitempty"`
+	SomeFloat float64                   `csva:"some_float"`
+	SomeBool  bool                      `csva:"some_bool"`
+	SomePtr   *string                   `csva:"some_ptr"`
 }
 
 type PersonWithManyTypesEmail struct {
@@ -40,6 +41,10 @@ type PersonWithManyTypesEmail struct {
 func (p *PersonWithManyTypesEmail) UnmarshalText(text []byte) error {
 	p.Email = string(text)
 	return nil
+}
+
+func (p PersonWithManyTypesEmail) MarshalText() ([]byte, error) {
+	return []byte(p.Email), nil
 }
 
 func TestNoImplicitAlias(t *testing.T) {
@@ -170,8 +175,8 @@ func TestNewCSVAdapter(t *testing.T) {
 func TestFromCSV(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		csvData := `name,age,email
-John Doe,30,john@example.com
-Jane Smith,25,jane@example.com
+John Doe,30,` + fakemail + `
+Jane Smith,25,` + otherfakemail + `
 `
 
 		reader := bytes.NewReader([]byte(csvData))
@@ -186,8 +191,8 @@ Jane Smith,25,jane@example.com
 		}
 
 		expected := []Person{
-			{"John Doe", 30, "john@example.com"},
-			{"Jane Smith", 25, "jane@example.com"},
+			{"John Doe", 30, fakemail},
+			{"Jane Smith", 25, otherfakemail},
 		}
 
 		idx := 0
@@ -251,7 +256,7 @@ func TestFromCSVWithOmitEmpty(t *testing.T) {
 	t.Run("omit empty", func(t *testing.T) {
 		csvData := `name,age,email
 John Doe,30,
-Jane Smith,25,jane@example.com`
+Jane Smith,25,` + otherfakemail
 
 		reader := bytes.NewReader([]byte(csvData))
 		adapter, err := NewCSVAdapter[Person]()
@@ -266,7 +271,7 @@ Jane Smith,25,jane@example.com`
 
 		expected := []Person{
 			{"John Doe", 30, ""},
-			{"Jane Smith", 25, "jane@example.com"},
+			{"Jane Smith", 25, otherfakemail},
 		}
 
 		idx := 0
@@ -336,7 +341,7 @@ Jane Smith
 
 func TestFromCSVWithInvalidData(t *testing.T) {
 	csvData := `name,age,email
-John Doe,thirty,john@example.com
+John Doe,thirty,` + fakemail + `
 `
 
 	reader := bytes.NewReader([]byte(csvData))
@@ -363,8 +368,8 @@ John Doe,thirty,john@example.com
 
 func TestFromCSVWithManyTypes(t *testing.T) {
 	csvData := `name,age,email,some_float,some_bool,some_ptr
-John Doe,30,test@mail.com,3.14,true,hello
-Jane Smith,25,12@mail.com,2.71,false,123
+John Doe,30,` + fakemail + `,3.14,true,hello
+Jane Smith,25,` + otherfakemail + `,2.71,false,123
 `
 
 	reader := bytes.NewReader([]byte(csvData))
@@ -378,15 +383,11 @@ Jane Smith,25,12@mail.com,2.71,false,123
 		t.Fatalf("failed to read CSV: %v", err)
 	}
 
-	stringPtr := func(s string) *string {
-		return &s
-	}
-
 	expected := []PersonWithManyTypes{
 		{
 			"John Doe",
 			30,
-			PersonWithManyTypesEmail{"test@mail.com"},
+			&PersonWithManyTypesEmail{fakemail},
 			3.14,
 			true,
 			stringPtr("hello"),
@@ -394,7 +395,7 @@ Jane Smith,25,12@mail.com,2.71,false,123
 		{
 			"Jane Smith",
 			25,
-			PersonWithManyTypesEmail{"12@mail.com"},
+			&PersonWithManyTypesEmail{otherfakemail},
 			2.71,
 			false,
 			stringPtr("123"),
@@ -416,4 +417,190 @@ Jane Smith,25,12@mail.com,2.71,false,123
 		}
 		idx++
 	}
+}
+
+func TestToCSV(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		adapter, err := NewCSVAdapter[Person]()
+		if err != nil {
+			t.Fatalf("failed to create csva: %v", err)
+		}
+
+		people := []Person{
+			{"John Doe", 30, fakemail},
+			{"Jane Smith", 25, otherfakemail},
+		}
+
+		writer := &bytes.Buffer{}
+		err = adapter.ToCSV(writer, slices.Values(people))
+		if err != nil {
+			t.Fatalf("failed to write CSV: %v", err)
+		}
+
+		expected := `name,age,email
+John Doe,30,` + fakemail + `
+Jane Smith,25,` + otherfakemail + `
+`
+		if writer.String() != expected {
+			t.Errorf("expected %s, got %s", expected, writer.String())
+		}
+	})
+}
+
+func TestToCSVWithOmitEmpty(t *testing.T) {
+	adapter, err := NewCSVAdapter[Person]()
+	if err != nil {
+		t.Fatalf("failed to create csva: %v", err)
+	}
+
+	people := []Person{
+		{"John Doe", 30, ""},
+		{"Jane Smith", 25, otherfakemail},
+	}
+
+	writer := &bytes.Buffer{}
+	err = adapter.ToCSV(writer, slices.Values(people))
+	if err != nil {
+		t.Fatalf("failed to write CSV: %v", err)
+	}
+
+	expected := `name,age,email
+John Doe,30,
+Jane Smith,25,` + otherfakemail + `
+`
+	if writer.String() != expected {
+		t.Errorf("expected %s, got %s", expected, writer.String())
+	}
+}
+
+func TestToCSVWithMissingField(t *testing.T) {
+	adapter, err := NewCSVAdapter[Person]()
+	if err != nil {
+		t.Fatalf("failed to create csva: %v", err)
+	}
+
+	people := []Person{
+		{"John Doe", 30, fakemail},
+		{"Jane Smith", 25, ""},
+	}
+
+	writer := &bytes.Buffer{}
+	err = adapter.ToCSV(writer, slices.Values(people))
+	if err != nil {
+		t.Fatalf("failed to write CSV: %v", err)
+	}
+
+	expected := `name,age,email
+John Doe,30,` + fakemail + `
+Jane Smith,25,
+`
+	if writer.String() != expected {
+		t.Errorf("expected %s, got %s", expected, writer.String())
+	}
+}
+
+func TestToCSVWithManyTypes(t *testing.T) {
+	adapter, err := NewCSVAdapter[PersonWithManyTypes]()
+	if err != nil {
+		t.Fatalf("failed to create csva: %v", err)
+	}
+
+	people := []PersonWithManyTypes{
+		{
+			"John Doe",
+			30,
+			&PersonWithManyTypesEmail{fakemail},
+			3.14,
+			true,
+			stringPtr("hello"),
+		},
+		{
+			"Jane Smith",
+			25,
+			&PersonWithManyTypesEmail{otherfakemail},
+			2.71,
+			false,
+			stringPtr("123"),
+		},
+	}
+
+	writer := &bytes.Buffer{}
+	err = adapter.ToCSV(writer, slices.Values(people))
+	if err != nil {
+		t.Fatalf("failed to write CSV: %v", err)
+	}
+
+	expected := `name,age,email,some_float,some_bool,some_ptr
+John Doe,30,` + fakemail + `,3.140000,true,hello
+Jane Smith,25,` + otherfakemail + `,2.710000,false,123
+`
+	if writer.String() != expected {
+		t.Errorf("expected\n%s, got\n%s", expected, writer.String())
+	}
+}
+
+func TestToCSVWithNoTags(t *testing.T) {
+	adapter, err := NewCSVAdapter[PersonNoTags]()
+	if err != nil {
+		t.Fatalf("failed to create csva: %v", err)
+	}
+
+	people := []PersonNoTags{
+		{"John Doe", 30},
+		{"Jane Smith", 25},
+	}
+
+	writer := &bytes.Buffer{}
+	err = adapter.ToCSV(writer, slices.Values(people))
+	if err != nil {
+		t.Fatalf("failed to write CSV: %v", err)
+	}
+
+	expected := `Name,Age
+John Doe,30
+Jane Smith,25
+`
+	if writer.String() != expected {
+		t.Errorf("expected %s, got %s", expected, writer.String())
+	}
+}
+
+func TestToCSVWithNoTagsAndOmitEmpty(t *testing.T) {
+	adapter, err := NewCSVAdapter[PersonNoTags]()
+	if err != nil {
+		t.Fatalf("failed to create csva: %v", err)
+	}
+
+	people := []PersonNoTags{
+		{"John Doe", 30},
+		{"Jane Smith", 0},
+	}
+
+	writer := &bytes.Buffer{}
+	err = adapter.ToCSV(writer, slices.Values(people))
+	if err != nil {
+		t.Fatalf("failed to write CSV: %v", err)
+	}
+
+	expected := `Name,Age
+John Doe,30
+Jane Smith,0
+`
+	if writer.String() != expected {
+		t.Errorf("expected %s, got %s", expected, writer.String())
+	}
+}
+
+// Test data
+const (
+	fakemail      = "fakemail@mail.com"
+	otherfakemail = "otherfakenail@mail.com"
+	name          = "John Doe"
+	othername     = "Jane Smith"
+	age           = 30
+	otherage      = 25
+)
+
+func stringPtr(s string) *string {
+	return &s
 }

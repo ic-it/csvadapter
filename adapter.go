@@ -373,19 +373,22 @@ func marshalField(field reflect.Value) (string, error) {
 		}
 		return marshalField(field.Elem())
 	default:
+		// take pointer to the field
 		if field.CanAddr() {
-			// check if the field implements encoding.TextMarshaler
-			if m, ok := field.Addr().Interface().(encoding.TextMarshaler); ok {
-				b, err := m.MarshalText()
-				if err != nil {
-					return "", err
-				}
-				return string(b), nil
+			field = field.Addr()
+		}
+
+		// check if the field implements encoding.TextMarshaler
+		if m, ok := field.Interface().(encoding.TextMarshaler); ok {
+			b, err := m.MarshalText()
+			if err != nil {
+				return "", err
 			}
-			// check if the field implements fmt.Stringer
-			if s, ok := field.Addr().Interface().(fmt.Stringer); ok {
-				return s.String(), nil
-			}
+			return string(b), nil
+		}
+		// check if the field implements fmt.Stringer
+		if s, ok := field.Interface().(fmt.Stringer); ok {
+			return s.String(), nil
 		}
 		return "", errors.Join(ErrUnprocessableType, fmt.Errorf("type %s", field.Kind()))
 	}
